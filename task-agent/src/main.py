@@ -1,26 +1,40 @@
 from agent import agent, Context
 
-print("欢迎使用智能助手")
 
-while True:
-    user_input = input("请输入任务：")
+def main() -> None:
+    print("欢迎使用智能助手")
 
-    if user_input == "exit":
-        break
+    while True:
+        try:
+            user_input = input("请输入任务：").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n程序已退出。")
+            break
 
-    
-    #交互
-    # `thread_id` is a unique identifier for a given conversation.
-    config = {"configurable": {"thread_id": "1"}}
+        if user_input.lower() == "exit":
+            print("程序已退出。")
+            break
 
-    response = agent.invoke(
-        {"messages": [{"role": "user", "content": user_input}]},
-        config=config,
-        context=Context(user_id="1")
-    )
+        if not user_input:
+            print("请输入有效任务。")
+            continue
 
-    print(response['structured_response'])
-    # ResponseFormat(
-    #     punny_response="Florida is still having a 'sun-derful' day! The sunshine is playing 'ray-dio' hits all day long! I'd say it's the perfect weather for some 'solar-bration'! If you were hoping for rain, I'm afraid that idea is all 'washed up' - the forecast remains 'clear-ly' brilliant!",
-    #     weather_conditions="It's always sunny in Florida!"
-    # )
+        # `thread_id` is a unique identifier for a given conversation.
+        config = {"configurable": {"thread_id": "1"}}
+
+        try:
+            response = agent.invoke(
+                {"messages": [{"role": "user", "content": user_input}]},
+                config=config,
+                context=Context(user_id="1"),
+            )
+        except Exception as exc:
+            print(f"调用智能体失败：{type(exc).__name__}: {exc}")
+            print("请检查网络、代理配置和 API Key 后重试。")
+            continue
+
+        print(response["structured_response"])
+
+
+if __name__ == "__main__":
+    main()
