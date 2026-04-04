@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -129,6 +130,18 @@ def _append_log(message: str) -> None:
         file.write(f"[{timestamp}] {message}\n")
 
 
+def _get_default_city() -> str:
+    return _clean_text(os.getenv("TASK_AGENT_DEFAULT_CITY", "Shanghai")) or "Shanghai"
+
+
+def _get_user_location_from_config(user_id: str) -> str:
+    env_key = f"TASK_AGENT_USER_{user_id}_LOCATION"
+    configured_city = _clean_text(os.getenv(env_key, ""))
+    if configured_city:
+        return configured_city
+    return USER_LOCATIONS.get(user_id, _get_default_city())
+
+
 def _load_task_store() -> dict[str, list[dict[str, Any]]]:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not TASKS_DB_FILE.exists():
@@ -212,7 +225,7 @@ def get_weather_for_location(city: str) -> str:
 def get_user_location(runtime: ToolRuntime[Context]) -> str:
     """Retrieve user location based on user ID."""
     user_id = runtime.context.user_id
-    return USER_LOCATIONS.get(user_id, "Shanghai")
+    return _get_user_location_from_config(user_id)
 
 
 @tool

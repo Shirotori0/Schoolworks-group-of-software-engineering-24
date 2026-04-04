@@ -1,8 +1,21 @@
+import os
+
 from src.agent import Context, agent
+
+
+def _get_thread_id() -> str:
+    return os.getenv("TASK_AGENT_THREAD_ID", "1").strip() or "1"
+
+
+def _get_user_id() -> str:
+    return os.getenv("TASK_AGENT_USER_ID", "1").strip() or "1"
 
 
 def main() -> None:
     print("欢迎使用智能助手")
+
+    thread_id = _get_thread_id()
+    user_id = _get_user_id()
 
     while True:
         try:
@@ -20,13 +33,13 @@ def main() -> None:
             continue
 
         # `thread_id` is a unique identifier for a given conversation.
-        config = {"configurable": {"thread_id": "1"}}
+        config = {"configurable": {"thread_id": thread_id}}
 
         try:
             response = agent.invoke(
                 {"messages": [{"role": "user", "content": user_input}]},
                 config=config,
-                context=Context(user_id="1"),
+                context=Context(user_id=user_id),
             )
         except Exception as exc:
             print(f"调用智能体失败：{type(exc).__name__}: {exc}")
