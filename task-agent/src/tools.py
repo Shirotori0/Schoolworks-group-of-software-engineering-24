@@ -42,6 +42,33 @@ SIMULATED_WEATHER = [
     ("阴", "24°C", "体感偏闷"),
 ]
 
+STATUS_ALIAS = {
+    "all": "all",
+    "全部": "all",
+    "pending": "pending",
+    "待办": "pending",
+    "todo": "pending",
+    "completed": "completed",
+    "done": "completed",
+    "已完成": "completed",
+}
+
+PRIORITY_ALIAS = {
+    "low": "low",
+    "低": "low",
+    "低优先级": "low",
+    "medium": "medium",
+    "normal": "medium",
+    "中": "medium",
+    "普通": "medium",
+    "默认": "medium",
+    "high": "high",
+    "高": "high",
+    "高优先级": "high",
+    "urgent": "high",
+    "紧急": "high",
+}
+
 
 def _clean_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
@@ -181,9 +208,69 @@ def _find_task(tasks: list[dict[str, Any]], task_id: str) -> dict[str, Any] | No
 
 def _format_task(task: dict[str, Any]) -> str:
     status = "已完成" if task.get("status") == "completed" else "待办"
+    priority = {
+        "high": "高优先级",
+        "medium": "中优先级",
+        "low": "低优先级",
+    }.get(task.get("priority", "medium"), "中优先级")
+    due_date = task.get("due_date")
+    due_date_suffix = f" | 截止：{due_date}" if due_date else ""
+    note = task.get("note")
+    note_suffix = f" | 备注：{note}" if note else ""
     completed_at = task.get("completed_at")
     completed_suffix = f" | 完成于：{completed_at}" if completed_at else ""
-    return f"{task['id']} [{status}] {task['title']}{completed_suffix}"
+    return (
+        f"{task['id']} [{status}] [{priority}] {task['title']}"
+        f"{due_date_suffix}{note_suffix}{completed_suffix}"
+    )
+
+
+def _normalize_status(status: str) -> str:
+    return STATUS_ALIAS.get(_clean_text(status).lower() or "all", "all")
+
+
+def _normalize_priority(priority: str) -> str:
+    return PRIORITY_ALIAS.get(_clean_text(priority).lower(), "")
+
+
+def _normalize_optional_text(value: str) -> str | None:
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return None
+    if cleaned.lower() in {"none", "null", "nil", "n/a"} or cleaned in {"无", "清空", "删除"}:
+        return ""
+    return cleaned
+
+
+def _task_matches_filters(
+    task: dict[str, Any],
+    *,
+    status: str,
+    keyword: str,
+    priority: str,
+    due_date: str,
+) -> bool:
+    task_status = task.get("status", "pending")
+    task_priority = task.get("priority", "medium")
+    task_due_date = _clean_text(str(task.get("due_date") or ""))
+    haystack = " ".join(
+        [
+            _clean_text(str(task.get("id", ""))),
+            _clean_text(str(task.get("title", ""))),
+            _clean_text(str(task.get("source", ""))),
+            _clean_text(str(task.get("note", ""))),
+        ]
+    ).lower()
+
+    if status != "all" and task_status != status:
+        return False
+    if priority and task_priority != priority:
+        return False
+    if due_date and task_due_date != due_date:
+        return False
+    if keyword and keyword.lower() not in haystack:
+        return False
+    return True
 
 
 def _build_managed_tasks(user_input: str) -> list[str]:
@@ -241,6 +328,9 @@ def create_managed_tasks(user_input: str) -> str:
             "id": _next_task_id(tasks),
             "title": title,
             "status": "pending",
+            "priority": "medium",
+            "due_date": None,
+            "note": "",
             "created_at": timestamp,
             "completed_at": None,
             "source": summary,
@@ -256,25 +346,30 @@ def create_managed_tasks(user_input: str) -> str:
 
 
 @tool
-def list_managed_tasks(status: str = "all") -> str:
-    """查看结构化任务。status 可选 all、pending、completed。"""
-    normalized_status = _clean_text(status).lower() or "all"
-    status_alias = {
-        "all": "all",
-        "全部": "all",
-        "pending": "pending",
-        "待办": "pending",
-        "todo": "pending",
-        "completed": "completed",
-        "done": "completed",
-        "已完成": "completed",
-    }
-    normalized_status = status_alias.get(normalized_status, "all")
+def list_managed_tasks(
+    status: str = "all",
+    keyword: str = "",
+    priority: str = "",
+    due_date: str = "",
+) -> str:
+    """查看结构化任务，可按状态、关键词、优先级、截止日期筛选。"""
+    normalized_status = _normalize_status(status)
+    normalized_priority = _normalize_priority(priority)
+    normalized_keyword = _clean_text(keyword)
+    normalized_due_date = _clean_text(due_date)
 
     store = _load_task_store()
-    tasks = store["tasks"]
-    if normalized_status != "all":
-        tasks = [task for task in tasks if task.get("status") == normalized_status]
+    tasks = [
+        task
+        for task in store["tasks"]
+        if _task_matches_filters(
+            task,
+            status=normalized_status,
+            keyword=normalized_keyword,
+            priority=normalized_priority,
+            due_date=normalized_due_date,
+        )
+    ]
 
     if not tasks:
         return "当前没有符合条件的结构化任务。"
@@ -286,6 +381,65 @@ def list_managed_tasks(status: str = "all") -> str:
     }[normalized_status]
     lines = [f"- {_format_task(task)}" for task in tasks]
     return header + "\n" + "\n".join(lines)
+
+
+@tool
+def update_managed_task(
+    task_id: str,
+    title: str = "",
+    priority: str = "",
+    due_date: str = "",
+    note: str = "",
+    status: str = "",
+) -> str:
+    """更新指定结构化任务的标题、优先级、截止日期、备注或状态。"""
+    store = _load_task_store()
+    tasks = store["tasks"]
+    task = _find_task(tasks, task_id)
+    if task is None:
+        return f"未找到任务 {task_id}。"
+
+    updates: list[str] = []
+
+    normalized_title = _normalize_optional_text(title)
+    if normalized_title:
+        task["title"] = normalized_title
+        updates.append("标题")
+
+    if priority:
+        normalized_priority = _normalize_priority(priority)
+        if not normalized_priority:
+            return "优先级仅支持 high/medium/low 或 高/中/低。"
+        task["priority"] = normalized_priority
+        updates.append("优先级")
+
+    normalized_due_date = _normalize_optional_text(due_date)
+    if normalized_due_date is not None:
+        task["due_date"] = normalized_due_date or None
+        updates.append("截止日期")
+
+    normalized_note = _normalize_optional_text(note)
+    if normalized_note is not None:
+        task["note"] = normalized_note
+        updates.append("备注")
+
+    if status:
+        normalized_status = _normalize_status(status)
+        if normalized_status == "all":
+            return "状态仅支持 pending/completed 或 待办/已完成。"
+        task["status"] = normalized_status
+        if normalized_status == "completed":
+            task["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            task["completed_at"] = None
+        updates.append("状态")
+
+    if not updates:
+        return "未提供可更新的字段。"
+
+    _save_task_store(store)
+    _append_log(f"updated managed task {task['id']} ({', '.join(updates)})")
+    return f"已更新任务：{_format_task(task)}"
 
 
 @tool
@@ -341,6 +495,7 @@ tools = [
     create_task_list,
     create_managed_tasks,
     list_managed_tasks,
+    update_managed_task,
     complete_managed_task,
     delete_managed_task,
     save_to_file,
