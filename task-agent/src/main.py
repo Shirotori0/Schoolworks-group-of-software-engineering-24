@@ -1,4 +1,4 @@
-from agent import agent, Context
+from src.agent import Context, agent
 
 
 def main() -> None:
