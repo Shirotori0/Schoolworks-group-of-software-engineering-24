@@ -31,8 +31,7 @@ class Embedder:
             model=self.model,
             input=texts
         )
-        return [response.data[0].embedding for response in responses]
-
+        return [item.embedding for item in responses.data]
 
 
 
