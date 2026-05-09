@@ -1,5 +1,5 @@
 # 向量化并存储用户历史记录
-from ..vector_store import vector_store
+from ..vector_store import vectorStore
 from ..embedding import embedder
 
 def store_memory(text: str, user_id: str):
@@ -7,4 +7,4 @@ def store_memory(text: str, user_id: str):
     vector = embedder.embed(text)
 
     # 存储文本、向量和用户ID
-    vector_store.add(text, vector, user_id)
+    vectorStore.add(text, vector, user_id)
