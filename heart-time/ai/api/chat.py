@@ -1,4 +1,4 @@
-from ..pipeline.generator import generate_response
+from ..pipeline.generator import generate_runtime
 from ..api_schemas.chat import ChatRequest, ChatResponse
 from fastapi import APIRouter
 
@@ -7,11 +7,12 @@ router = APIRouter()
 @router.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
 
-    response = generate_response(
-        user_input=request.user_input,
-        user_id=request.user_id
-    )
-
+    user_input=request.user_input,
+    session_id=request.session_id
+    
+    runtime = generate_runtime(session_id)
+    response = runtime.chat(user_input)
+    
     return ChatResponse(
         response=response
     )
