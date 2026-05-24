@@ -15,7 +15,6 @@ class AIRuntime:
     ):
         self.agent = agent
         self.tool_registry = tool_registry
-        self.messages = [3]
         self.session_id = session_id
 
         # 注意维护唯一prompt
@@ -28,12 +27,11 @@ class AIRuntime:
 
     def chat(self, user_input: str):
         self.prompt.user_input = user_input
-        prompt_content = self.prompt.build_prompt()
 
-        self.messages[0] = {"role": "user", "content": prompt_content}
+        messages = [{"role": "user", "content": self.prompt.build_prompt()}]
 
         response = self.agent.chat(
-            messages=self.messages,
+            messages=messages,
             tools=self.tool_registry.get_tools()
         )
 
@@ -42,14 +40,34 @@ class AIRuntime:
         
         if message.tool_calls:
 
+            tool_responses = []
+
             for tool_call in message.tool_calls:
                 tool_name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
 
-                tool_response = self.tool_registry.execute_tool(tool_name, **tool_args)
+                tool_responses.append({tool_name: self.tool_registry.execute_tool(tool_name, **tool_args)})
 
-                
+            for tool_response in tool_responses:
+                if tool_response.get("Retrieve_Context"):
+                    self.prompt.rag_retrievals.extend(tool_response["Retrieve_Context"])
 
+                    messages = [{"role": "user", "content": self.prompt.build_prompt()}]
+                    response = self.agent.chat(
+                        messages=messages,
+                        tools=self.tool_registry.get_tools()
+                    )
+                    message = response.choices[0].message
+
+                    if message.tool_calls:
+                        tool_responses = []
+                        for tool_call in message.tool_calls:
+                            if tool_call.function.name != "Retrieve_Context":
+                                tool_name = tool_call.function.name
+                                tool_args = json.loads(tool_call.function.arguments)
+
+                                self.tool_registry.execute_tool(tool_name, **tool_args)
+                                
 
         self.prompt.update_chat_history(user_input)
 

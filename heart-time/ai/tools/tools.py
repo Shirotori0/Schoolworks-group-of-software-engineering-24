@@ -69,3 +69,25 @@ class UpdateEmotionTool(BaseTool):
         prompt.update_emotion_curve(label, score)
 
         return "当前会话的情绪已更新"
+    
+from ..rag.rag import retrieve_context
+class RetrieveContextTool(BaseTool):
+    name = "Retrieve_Context"
+    description = "检索相关的上下文信息，确保AI能够获取必要的信息来生成更准确的回复。"
+
+    parameters = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "检索上下文信息的查询语句"
+            }
+        },
+        "required": ["query"]
+    }
+
+    def execute(self, query):
+        # 这里可以添加逻辑来检索相关的上下文信息，例如从数据库或内存中获取与查询相关的信息
+        retrieved_info = retrieve_context(query)
+
+        return retrieved_info

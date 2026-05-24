@@ -2,6 +2,7 @@
 import json
 import os
 import numpy as np
+from pathlib import Path
 
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
@@ -58,3 +59,35 @@ class VectorStore:
                 f.write("\n")
 
         self.buffer.clear()
+
+    def retrieve_vectors(self, query_vector, top_k=3):
+        
+        results = []
+
+        dir_path = os.path.dirname(self.path)
+        if not os.path.exists(dir_path):
+            return []
+        
+        for file in Path(dir_path).glob("*.jsonl"):
+
+            try:
+                with open(file, "r", encoding="utf-8") as f:
+
+                    for line in f:
+
+                        if not line.strip():
+                            continue
+
+                        chunk = json.loads(line)
+
+                        sim = cosine_similarity(query_vector, chunk["vector"])
+                        results.append((sim, {
+                            "text": chunk["text"],
+                            "metadata": chunk["metadata"]
+                        }))
+                        
+            except Exception as e:
+                print(f"Error reading {file}: {e}")
+
+        results.sort(key=lambda x: x[0], reverse=True)
+        return [chunk for _, chunk in results[:top_k]]

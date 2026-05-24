@@ -2,15 +2,14 @@
 from .embedding import embedder
 from .vector_store import vectorStore
 
-def retrieve_memory(text: str, user_id: str, top_k: int = 3):
+def retrieve_context(text: str, top_k: int = 10):
     # 将用户输入文本转换为向量
     query_vector = embedder.embed(text)
 
     # 检索与输入文本向量相似的历史文本
-    memories = vectorStore.search(
+    context = vectorStore.retrieve_vectors(
         query_vector,
-        user_id,
         top_k
     )
     
-    return memories
+    return context

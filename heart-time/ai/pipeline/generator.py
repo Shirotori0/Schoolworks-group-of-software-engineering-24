@@ -1,6 +1,5 @@
 from ..agent import agent
 from ..prompt import prompt 
-from ..rag.rag import retrieve_memory
 from ..memory.memory import store_memory
 
 

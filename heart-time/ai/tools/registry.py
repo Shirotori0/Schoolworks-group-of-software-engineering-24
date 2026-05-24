@@ -1,11 +1,12 @@
-from .tools import UpdateMemoryTool, UpdateSessionSummaryTool, UpdateEmotionTool
+from .tools import UpdateMemoryTool, UpdateSessionSummaryTool, UpdateEmotionTool, RetrieveContextTool
 
 class ToolRegistry:
     def __init__(self):
         self.tools = {
             UpdateMemoryTool.name: UpdateMemoryTool(),
             UpdateSessionSummaryTool.name: UpdateSessionSummaryTool(),
-            UpdateEmotionTool.name: UpdateEmotionTool()
+            UpdateEmotionTool.name: UpdateEmotionTool(),
+            RetrieveContextTool.name: RetrieveContextTool()
         }
         
 
