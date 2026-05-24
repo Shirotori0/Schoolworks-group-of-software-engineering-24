@@ -4,7 +4,7 @@ from ..rag.chunk import textChunker
 from ..rag.vector_store import vectorStore
 from ..rag.embedding import embedder
 
-from ..rag.load_file import textLoader
+from ..utils.load_file import textLoader
 from ..rag.chunk.chunk import Chunk
 
 class EmbeddingRuntime:

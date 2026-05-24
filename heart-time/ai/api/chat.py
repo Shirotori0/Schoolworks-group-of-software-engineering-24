@@ -1,5 +1,5 @@
 from ..pipeline.generator import generate_runtime
-from ..api_schemas.chat import ChatRequest, ChatResponse
+from .schemas.chat import ChatRequest, ChatResponse
 from fastapi import APIRouter
 
 router = APIRouter()

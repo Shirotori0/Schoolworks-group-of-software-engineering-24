@@ -1,5 +1,5 @@
 from ..pipeline.embedding_runtime import EmbeddingRuntime
-from ..api_schemas.load_story import LoadStoryRequest, LoadStoryResponse
+from .schemas.load_story import LoadStoryRequest, LoadStoryResponse
 from fastapi import APIRouter
 
 router = APIRouter()

@@ -91,3 +91,148 @@ class RetrieveContextTool(BaseTool):
         retrieved_info = retrieve_context(query)
 
         return retrieved_info
+    
+from ..prompt.script import save_script
+class MakeScriptTool(BaseTool):
+    name = "Make_Script"
+    description = "生成角色互动脚本，确保AI能够生成符合角色设定的回复。"
+
+    parameters = {
+        "type": "object",
+        "properties": {
+        "name": {
+          "type": "string",
+          "description": "角色名字"
+        },
+        "age": {
+          "type": "integer",
+          "description": "角色年龄"
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["male", "female", "other"],
+          "description": "角色性别"
+        },
+        "occupation": {
+          "type": "string",
+          "description": "角色职业"
+        },
+        "background": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "角色背景经历"
+        },
+        "personality": {
+          "type": "object",
+          "properties": {
+            "extroversion": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "外向程度"
+            },
+            "kindness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "友善程度"
+            },
+            "humor": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "幽默程度"
+            },
+            "emotional": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "情绪化程度"
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "自信程度"
+            }
+          },
+          "required": [
+            "extroversion",
+            "kindness",
+            "humor",
+            "emotional",
+            "confidence"
+          ]
+        },
+        "speaking_style": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "角色说话风格"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "角色价值观"
+        },
+        "habits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "角色习惯"
+        },
+        "relationship": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "type": "string",
+              "description": "角色与用户的关系"
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "角色与用户的故事"
+        }
+      },
+      "required": [
+        "name",
+        "age",
+        "gender",
+        "occupation",
+        "background",
+        "personality",
+        "speaking_style",
+        "values",
+        "habits",
+        "relationship",
+        "events"
+      ]
+    }
+
+    def execute(self, name, age, gender, occupation, background, personality, speaking_style, values, habits, relationship, events):
+        # 这里可以添加逻辑来生成角色互动脚本，例如根据提供的角色信息生成符合设定的回复
+        script = {
+            "name": name,
+            "age": age,
+            "gender": gender,
+            "occupation": occupation,
+            "background": background,
+            "personality": personality,
+            "speaking_style": speaking_style,
+            "values": values,
+            "habits": habits,
+            "relationship": relationship,
+            "events": events
+        }
+        save_script(f"{name}", script)
+        return "角色互动脚本已生成并保存"
