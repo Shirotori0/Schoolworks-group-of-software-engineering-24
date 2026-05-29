@@ -1,9 +1,13 @@
 import json
+from typing import Callable, List, Optional
+
+from ..config import vector_path_for_source
 from ..prompt.prompt import Prompt
 from ..prompt.prompt_store import load, save
-from ..prompt.script import load_script, save_script
+from ..prompt.script import load_script
 
 from ..utils.load_file import textLoader
+
 
 class AIRuntime:
 
@@ -13,120 +17,153 @@ class AIRuntime:
         prompt,
         tool_registry,
         session_id: str,
-        script_path: str = None
+        script_path: str = None,
+        vector_paths: Optional[List[str]] = None,
     ):
         self.agent = agent
         self.tool_registry = tool_registry
         self.session_id = session_id
 
-        # 注意维护唯一prompt
+        # [修复] 从磁盘恢复时使用独立实例，不再与全局 prompt 混用
         data = load(session_id)
         if data:
-            prompt = Prompt.from_dict(data)
-            self.prompt = prompt
+            self.prompt = Prompt.from_dict(data)
         else:
             self.prompt = prompt
 
         if script_path:
-            self.prompt.script = load_script(script_path)    
+            self.prompt.script = load_script(script_path)
 
-        
+        if vector_paths:
+            self.vector_paths = [str(p) for p in vector_paths]
+        else:
+            self.vector_paths = None
+
+    def _bind_tools(self):
+        self.tool_registry.bind_prompt(self.prompt)
+        self.tool_registry.bind_vector_paths(self.vector_paths)
+
+    @staticmethod
+    def _serialize_tool_result(result) -> str:
+        if isinstance(result, str):
+            return result
+        return json.dumps(result, ensure_ascii=False)
+
+    @staticmethod
+    def _assistant_message_dict(message) -> dict:
+        payload = {
+            "role": "assistant",
+            "content": message.content or "",
+        }
+        if message.tool_calls:
+            payload["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in message.tool_calls
+            ]
+        return payload
+
+    def _run_turn(self, build_prompt_fn: Callable[[], str], user_input: str) -> str:
+        """[优化] 抽取 chat / chat_cosplay 公共逻辑，统一工具调用与多轮 messages。"""
+        self.prompt.user_input = user_input
+        self._bind_tools()
+
+        tools = self.tool_registry.get_tools()
+        messages = [{"role": "user", "content": build_prompt_fn()}]
+
+        max_rounds = 3
+        message = None
+
+        for _ in range(max_rounds):
+            response = self.agent.chat(messages=messages, tools=tools)
+            message = response.choices[0].message
+
+            if not message.tool_calls:
+                break
+
+            messages.append(self._assistant_message_dict(message))
+
+            needs_regenerate = False
+            for tool_call in message.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = json.loads(tool_call.function.arguments)
+                result = self.tool_registry.execute_tool(tool_name, **tool_args)
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": self._serialize_tool_result(result),
+                })
+
+                if tool_name == "Retrieve_Context":
+                    self.prompt.update_retrieval_history(result)
+                    needs_regenerate = True
+
+            if needs_regenerate:
+                messages = [{"role": "user", "content": build_prompt_fn()}]
+                continue
+
+            # 非检索类工具已更新 prompt 状态，用新上下文再请求一轮
+            messages.append({"role": "user", "content": build_prompt_fn()})
+
+        assistant_reply = message.content if message else ""
+        self.prompt.update_chat_history(user_input, assistant_reply)
+        save(self.session_id, self.prompt.to_dict())
+
+        return assistant_reply
 
     def chat(self, user_input: str):
-        self.prompt.user_input = user_input
-
-        messages = [{"role": "user", "content": self.prompt.build_prompt()}]
-
-        response = self.agent.chat(
-            messages=messages,
-            tools=self.tool_registry.get_tools()
-        )
-
-        message = response.choices[0].message
-
-        
-        if message.tool_calls:
-
-            tool_responses = []
-
-            ## 处理工具调用，执行工具并保存结果
-            for tool_call in message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
-
-                tool_responses.append({tool_name: self.tool_registry.execute_tool(tool_name, **tool_args)})
-
-            ## 处理工具调用结果，如果有检索结果，更新prompt并重新生成回复
-            for tool_response in tool_responses:
-                if tool_response.get("Retrieve_Context"):
-                    self.prompt.update_retrieval_history(tool_response["Retrieve_Context"])
-
-                    messages = [{"role": "user", "content": self.prompt.build_prompt()}]
-                    response = self.agent.chat(
-                        messages=messages,
-                        tools=self.tool_registry.get_tools()
-                    )
-                    message = response.choices[0].message
-
-                    ## 注意：如果工具调用后重新生成回复，可能会再次调用工具，形成循环。这里简单处理为只允许一次工具调用后的回复生成，实际应用中需要更复杂的状态管理来避免无限循环。
-                    if message.tool_calls:
-                        tool_responses = []
-                        for tool_call in message.tool_calls:
-                            if tool_call.function.name != "Retrieve_Context":
-                                tool_name = tool_call.function.name
-                                tool_args = json.loads(tool_call.function.arguments)
-
-                                self.tool_registry.execute_tool(tool_name, **tool_args)
-                                
-
-        self.prompt.update_chat_history(user_input)
-
-        save(self.session_id, self.prompt.to_dict())
-
-        return message.content
-
-
-    def make_script(self, file_path: str, user_input: str):
-        text = textLoader.load(file_path)
-
-        self.prompt.user_input = user_input
-        prompt_to_script = self.prompt.build_script(text)
-
-        response = self.agent.chat(
-            messages=[{"role": "user", "content": prompt_to_script}],
-            tools=self.tool_registry.get_tools()
-        )
-        message = response.choices[0].message
-
-        if message.tool_calls:
-            for tool_call in message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
-
-                self.tool_registry.execute_tool(tool_name, **tool_args)
+        return self._run_turn(self.prompt.build_prompt, user_input)
 
     def chat_cosplay(self, user_input: str):
+        return self._run_turn(self.prompt.build_prompt_cosplay, user_input)
+
+    def make_script(self, file_path: str, user_input: str) -> dict:
+        text = textLoader.load(file_path)
         self.prompt.user_input = user_input
+        self._bind_tools()
 
-        messages = [{"role": "user", "content": self.prompt.build_prompt_cosplay()}]
+        messages = [{"role": "user", "content": self.prompt.build_script(text)}]
+        tools = self.tool_registry.get_tools()
 
-        response = self.agent.chat(
-            messages=messages,
-            tools=self.tool_registry.get_tools()
-        )
+        response = self.agent.chat(messages=messages, tools=tools)
         message = response.choices[0].message
 
+        script_path = None
+        tool_message = "剧本生成完成"
+
         if message.tool_calls:
+            messages.append(self._assistant_message_dict(message))
+
             for tool_call in message.tool_calls:
                 tool_name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
+                result = self.tool_registry.execute_tool(tool_name, **tool_args)
 
-                self.tool_registry.execute_tool(tool_name, **tool_args)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": self._serialize_tool_result(result),
+                })
 
-        self.prompt.update_chat_history(user_input)
+                if tool_name == "Make_Script" and isinstance(result, dict):
+                    script_path = result.get("script_path")
+                    tool_message = result.get("message", tool_message)
 
-        save(self.session_id, self.prompt.to_dict())
+        # [修复] 返回结构化结果，供 API 使用
+        return {
+            "message": message.content or tool_message,
+            "script_path": script_path,
+        }
 
-        return message.content
-
-    
+    def set_vector_paths_for_source(self, source_path: str):
+        """[优化] 根据故事源文件绑定对应向量库路径。"""
+        path = vector_path_for_source(source_path)
+        self.vector_paths = [str(path)]
+        self.tool_registry.bind_vector_paths(self.vector_paths)

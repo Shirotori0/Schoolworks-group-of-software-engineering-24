@@ -1,15 +1,23 @@
-#组装embedding和vector store模块
+# 组装 embedding 和 vector store 模块
+from pathlib import Path
+from typing import List, Optional, Union
+
 from .embedding import embedder
 from .vector_store import vectorStore
 
-def retrieve_context(text: str, top_k: int = 10):
-    # 将用户输入文本转换为向量
+
+def retrieve_context(
+    text: str,
+    top_k: int = 10,
+    vector_paths: Optional[List[Union[str, Path]]] = None,
+):
+    # [优化] vector_paths 限定检索范围，避免扫全库
     query_vector = embedder.embed(text)
 
-    # 检索与输入文本向量相似的历史文本
     context = vectorStore.retrieve_vectors(
         query_vector,
-        top_k
+        top_k,
+        vector_paths=vector_paths,
     )
-    
+
     return context
