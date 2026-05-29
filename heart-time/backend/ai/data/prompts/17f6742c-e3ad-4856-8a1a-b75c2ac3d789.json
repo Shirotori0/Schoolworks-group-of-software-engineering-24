@@ -1,0 +1,14 @@
+{
+    "memory": [],
+    "session_summary": "用户以轻松友好的方式打招呼，会话刚刚开始，氛围轻松愉快。等待用户开启话题。",
+    "chat_history": [
+        "哈咯哈咯啊，你好"
+    ],
+    "emotion_curve": [
+        {
+            "label": "happy",
+            "score": 0.6
+        }
+    ],
+    "retrieval_history": []
+}
