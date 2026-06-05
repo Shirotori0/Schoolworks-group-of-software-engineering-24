@@ -1,0 +1,10 @@
+__pycache__/ 
+*.pyc 
+*.pyo 
+*.bak 
+ai/data/prompts/*.json 
+ai/data/raw/*.txt 
+ai/data/vectors/ 
+backend/ai/data/prompts/*.json 
+backend/ai/data/raw/*.txt 
+backend/ai/data/vectors/ 
