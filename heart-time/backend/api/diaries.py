@@ -1,33 +1,14 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import text as db_text
 from config import get_db
+from api_schemas import CreateDiaryRequest, CreateDiaryResponse, DiaryItem
 from utils.exceptions import AppException
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# ===== 请求和响应模型 =====
-
-class CreateDiaryRequest(BaseModel):
-    user_id: int
-    content: str
-    content_type: str = "text"
-
-class CreateDiaryResponse(BaseModel):
-    diary_id: int
-    status: str
-
-class DiaryItem(BaseModel):
-    diary_id: int
-    content: str
-    emotion_tags: str = None
-    ai_reply: str = None
-    create_time: str
-
-# ===== 创建日记 =====
 
 @router.post("/diaries", response_model=CreateDiaryResponse)
 async def create_diary(request: CreateDiaryRequest, db: Session = Depends(get_db)):
@@ -39,7 +20,7 @@ async def create_diary(request: CreateDiaryRequest, db: Session = Depends(get_db
         emotion_tags = "愉悦-日常记录"
         ai_reply = f"感谢你的记录。我感受到了你的分享，继续保持哦。"
 
-        sql = text("""
+        sql = db_text("""
             INSERT INTO emotion_diary (user_id, diary_content, emotion_tags, ai_reply)
             VALUES (:user_id, :content, :tags, :reply)
         """)
@@ -64,8 +45,6 @@ async def create_diary(request: CreateDiaryRequest, db: Session = Depends(get_db
         raise AppException(status_code=500, detail="创建日记失败")
 
 
-# ===== 获取日记列表 =====
-
 @router.get("/diaries", response_model=list[DiaryItem])
 async def get_diaries(
     user_id: int = Query(..., description="用户ID"),
@@ -75,7 +54,7 @@ async def get_diaries(
 ):
     try:
         offset = (page - 1) * page_size
-        sql = text("""
+        sql = db_text("""
             SELECT id, diary_content, emotion_tags, ai_reply, create_time
             FROM emotion_diary
             WHERE user_id = :user_id
